@@ -1,0 +1,1 @@
+var g = new Gantt("container");
