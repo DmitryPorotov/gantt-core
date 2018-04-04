@@ -19,14 +19,16 @@
             cursor: move;
         }
     </style>
-    <script src="time-line.js"></script>
-    <script src="graph.js"></script>
-    <script src="gantt.js"></script>
+    <script data-main="/gantt-core/" src="node_modules/requirejs/require.js"></script>
 </head>
 <body>
 <div id="container">
 
 </div>
-<script src="bootstrapper.js"></script>
+<script type="application/javascript">
+    requirejs(['gantt'], function (gantt) {
+        new gantt.Gantt("container");
+    });
+</script>
 </body>
 </html>

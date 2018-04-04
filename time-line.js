@@ -1,186 +1,130 @@
-var TimeLine = /** @class */ (function () {
-    function TimeLine(container, currentHeight) {
-        this.container = container;
-        this.currentHeight = currentHeight;
-        this.zoomLevel = 2;
-        this.timeLine = {
-            line: null,
-            notches: null,
-            topLabels: null,
-            dateLabels: null,
-            notchesPositions: [],
-            firstTopLabel: null
-        };
-        this.svgViewBox = [];
-        this.svgViewBoxTmp = [];
-    }
-    TimeLine.prototype.init = function () {
-        this.displayStartDate = new Date;
-        this.currentHeight = 60;
-        this.svg = document.createElementNS(Gantt.SVG_NS, 'svg');
-        this.svg.setAttribute('class', 'draggable');
-        this.container.appendChild(this.svg);
-        this.redraw();
-        this.subscribeToEvents();
-    };
-    TimeLine.prototype.redraw = function () {
-        if (this.mainSvgGroup) {
-            this.mainSvgGroup.remove();
-            this.mainSvgGroup = null;
+define(["require", "exports", "./gantt"], function (require, exports, gantt_1) {
+    "use strict";
+    Object.defineProperty(exports, "__esModule", { value: true });
+    class TimeLine {
+        constructor(container) {
+            this.container = container;
+            this.svgViewBox = [];
+            this.timeLine = {
+                topLabels: null,
+                firstTopLabel: null
+            };
         }
-        this.containerWidth = this.container.offsetWidth;
-        this.svgDrawingWidth = window.innerWidth + 500;
-        this.svg.setAttribute('height', this.currentHeight + 'px');
-        this.svg.setAttribute('width', this.containerWidth + 'px');
-        this.svgViewBox = [0, 0, this.containerWidth, this.currentHeight];
-        this.svg.setAttribute('viewBox', this.svgViewBox.join(' '));
-        this.buildTimeLine(this.displayStartDate);
-    };
-    TimeLine.prototype.subscribeToEvents = function () {
-        var _this = this;
-        window.addEventListener('resize', function () {
-            _this.redraw();
-        });
-        document.addEventListener('mousemove', function (ev) {
-            if (typeof _this.dragStartX === 'number') {
-                var dx = ev.clientX - _this.dragStartX;
-                if (Math.abs(dx) < 200) {
-                    _this.svgViewBoxTmp[0] = _this.svgViewBox[0] - dx;
-                    _this.svg.setAttribute('viewBox', _this.svgViewBoxTmp.join(' '));
-                    _this.updateFirstTopLabel();
+        destruct() {
+            if (this.svg) {
+                this.svg.remove();
+                this.svg = null;
+            }
+        }
+        init(notches, displayStartDate, svgDrawingWidth) {
+            this.containerWidth = this.container.offsetWidth;
+            this.svgDrawingWidth = svgDrawingWidth;
+            this.svg = document.createElementNS(gantt_1.Gantt.SVG_NS, 'svg');
+            this.svg.setAttribute('class', 'draggable');
+            this.svg.setAttribute('style', 'background: rgba(0,0,0,.1);');
+            this.svg.setAttribute('height', gantt_1.Gantt.timeLineHeight + 'px');
+            this.svg.setAttribute('width', this.containerWidth + 'px');
+            this.svgViewBox = [0, 0, this.containerWidth, gantt_1.Gantt.timeLineHeight];
+            this.svg.setAttribute('viewBox', this.svgViewBox.join(' '));
+            this.container.appendChild(this.svg);
+            this.redraw(notches, displayStartDate);
+            this.subscribeToEvents();
+        }
+        redraw(notches, displayStartDate, delta = 0) {
+            if (this.mainSvgGroup) {
+                this.mainSvgGroup.remove();
+                this.mainSvgGroup = null;
+            }
+            this.buildTimeLine(notches, displayStartDate, delta);
+        }
+        subscribeToEvents() {
+            this.svg.addEventListener('mousedown', ev => {
+                if (!ev.button) {
+                    this.onMouseDown(ev);
+                }
+            });
+        }
+        onMouseMove(visibleStart, closestDate) {
+            this.svg.setAttribute('viewBox', [visibleStart, ...this.svgViewBox.slice(1)].join(' '));
+            this.updateFirstTopLabel(visibleStart, closestDate.date);
+        }
+        updateFirstTopLabel(visibleStart, firstDate) {
+            this.timeLine.firstTopLabel.setAttribute('x', '' + (visibleStart + 2));
+            const rect0 = this.timeLine.firstTopLabel.getBoundingClientRect();
+            const rect1 = this.timeLine.topLabels[0].getBoundingClientRect();
+            this.timeLine.firstTopLabel.textContent = TimeLine.monthTable[firstDate.getMonth()] + firstDate.getFullYear();
+            if (rect0.right >= rect1.left && rect1.right >= rect0.left) {
+                if (rect1.left <= rect0.left) {
+                    this.timeLine.firstTopLabel.setAttribute('visibility', 'visible');
+                    this.timeLine.topLabels[0].setAttribute('visibility', 'hidden');
                 }
                 else {
-                    var closestDate = _this.findClosestDate(_this.svgViewBoxTmp[0]);
-                    var delta = closestDate.position - _this.svgViewBoxTmp[0];
-                    _this.dragStartX = ev.clientX;
-                    _this.mainSvgGroup.remove();
-                    _this.buildTimeLine(closestDate.date, delta);
+                    this.timeLine.firstTopLabel.setAttribute('visibility', 'hidden');
+                    this.timeLine.topLabels[0].setAttribute('visibility', 'visible');
                 }
             }
-        });
-        document.addEventListener('mouseup', function () {
-            if (typeof _this.dragStartX === 'number') {
-                _this.dragStartX = undefined;
-                _this.displayStartDate = _this.findClosestDate(_this.svgViewBoxTmp[0]).date;
-                _this.redraw();
-            }
-        });
-        this.svg.addEventListener('mousedown', function (ev) {
-            if (!ev.button) {
-                _this.dragStartX = ev.clientX;
-            }
-        });
-    };
-    TimeLine.prototype.updateFirstTopLabel = function () {
-        this.timeLine.firstTopLabel.setAttribute('x', '' + (this.svgViewBoxTmp[0] + 2));
-        var rect0 = this.timeLine.firstTopLabel.getBoundingClientRect();
-        var rect1 = this.timeLine.topLabels[0].getBoundingClientRect();
-        var cd = this.findClosestDate(this.svgViewBoxTmp[0]);
-        this.timeLine.firstTopLabel.textContent = TimeLine.monthTable[cd.date.getMonth()] + cd.date.getFullYear();
-        if (rect0.right >= rect1.left && rect1.right >= rect0.left) {
-            if (rect1.left <= rect0.left) {
-                this.timeLine.firstTopLabel.setAttribute('visibility', 'visible');
-                this.timeLine.topLabels[0].setAttribute('visibility', 'hidden');
-            }
             else {
-                this.timeLine.firstTopLabel.setAttribute('visibility', 'hidden');
+                this.timeLine.firstTopLabel.setAttribute('visibility', 'visible');
                 this.timeLine.topLabels[0].setAttribute('visibility', 'visible');
             }
         }
-        else {
-            this.timeLine.firstTopLabel.setAttribute('visibility', 'visible');
-            this.timeLine.topLabels[0].setAttribute('visibility', 'visible');
+        buildTimeLine(notches, startDate, delta = null) {
+            this.mainSvgGroup = document.createElementNS(gantt_1.Gantt.SVG_NS, 'g');
+            this.mainSvgGroup.setAttribute('class', 'main-group');
+            const l = document.createElementNS(gantt_1.Gantt.SVG_NS, 'path');
+            l.setAttribute('fill', 'black');
+            l.setAttribute('d', 'M0 30 h' + this.svgDrawingWidth + ' v1 H0 z');
+            this.mainSvgGroup.appendChild(l);
+            const notchGroup = document.createElementNS(gantt_1.Gantt.SVG_NS, 'g');
+            const dateGroup = document.createElementNS(gantt_1.Gantt.SVG_NS, 'g');
+            dateGroup.setAttribute('class', 'chart-dates');
+            const tt = [];
+            const topTextGroup = document.createElementNS(gantt_1.Gantt.SVG_NS, 'g');
+            topTextGroup.setAttribute('class', 'chart-dates');
+            this.timeLine.firstTopLabel = document.createElementNS(gantt_1.Gantt.SVG_NS, 'text');
+            this.timeLine.firstTopLabel.textContent = TimeLine.monthTable[startDate.getMonth()] + startDate.getFullYear();
+            this.timeLine.firstTopLabel.setAttribute('y', '20');
+            this.timeLine.firstTopLabel.setAttribute('class', 'chart-dates');
+            this.mainSvgGroup.appendChild(this.timeLine.firstTopLabel);
+            this.timeLine.topLabels = tt;
+            let startPos = 0;
+            for (const n of notches) {
+                const isFirst = n.date.getDate() === 1;
+                if (isFirst) {
+                    const mt = document.createElementNS(gantt_1.Gantt.SVG_NS, 'text');
+                    mt.textContent = TimeLine.monthTable[n.date.getMonth()] + n.date.getFullYear();
+                    mt.setAttribute('y', '20');
+                    mt.setAttribute('x', '' + (n.position + 2));
+                    topTextGroup.appendChild(mt);
+                    tt.push(mt);
+                }
+                if (!gantt_1.Gantt.weekendTable[n.date.getDay()].isWeekend) {
+                    const p = document.createElementNS(gantt_1.Gantt.SVG_NS, 'path');
+                    p.setAttribute('d', 'M' + n.position + ' 40 v-' + (isFirst ? 20 : 10) + ' h1 v' + (isFirst ? 20 : 10) + ' z');
+                    notchGroup.appendChild(p);
+                    const t = document.createElementNS(gantt_1.Gantt.SVG_NS, 'text');
+                    t.textContent = '' + n.date.getDate();
+                    t.setAttribute('y', '50');
+                    t.setAttribute('x', '' + (n.position + 2));
+                    dateGroup.appendChild(t);
+                }
+                if (startDate.getTime() === n.date.getTime()) {
+                    startPos = n.position;
+                }
+            }
+            this.mainSvgGroup.appendChild(notchGroup);
+            this.mainSvgGroup.appendChild(dateGroup);
+            this.mainSvgGroup.appendChild(topTextGroup);
+            this.svg.appendChild(this.mainSvgGroup);
+            this.svgViewBox[0] = startPos
+                - (delta != null ? delta : 0);
+            this.updateFirstTopLabel(this.svgViewBox[0], startDate);
+            this.svg.setAttribute('viewBox', this.svgViewBox.join(' '));
         }
-    };
-    TimeLine.prototype.findClosestDate = function (point) {
-        var minDist = Number.POSITIVE_INFINITY;
-        var res;
-        for (var i = 0; i < this.timeLine.notchesPositions.length; ++i) {
-            var cur = Math.abs(this.timeLine.notchesPositions[i].position - point);
-            if (cur < minDist) {
-                minDist = cur;
-            }
-            else {
-                res = this.timeLine.notchesPositions[i - 1];
-                break;
-            }
-        }
-        return res;
-    };
-    TimeLine.prototype.buildTimeLine = function (startDate, delta) {
-        if (delta === void 0) { delta = null; }
-        this.mainSvgGroup = document.createElementNS(Gantt.SVG_NS, 'g');
-        this.mainSvgGroup.setAttribute('class', 'main-group');
-        var l = document.createElementNS(Gantt.SVG_NS, 'path');
-        l.setAttribute('fill', 'black');
-        l.setAttribute('d', 'M0 30 h' + this.svgDrawingWidth + ' v1 H0 z');
-        this.mainSvgGroup.appendChild(l);
-        this.timeLine.line = l;
-        var approxDaysPerScreen = Math.ceil(/*this.containerWidth*/ 150 / ((Gantt.zoomTable[this.zoomLevel].notchDistance * (7 - Gantt.numWeekends) +
-            Gantt.zoomTable[this.zoomLevel].weekendSpace * Gantt.numWeekends) / 7)) + 3;
-        var drawStartDate = new Date(startDate.getTime());
-        drawStartDate.setDate(drawStartDate.getDate() - approxDaysPerScreen);
-        var n = [];
-        var notchGroup = document.createElementNS(Gantt.SVG_NS, 'g');
-        var d = [];
-        var dateGroup = document.createElementNS(Gantt.SVG_NS, 'g');
-        dateGroup.setAttribute('class', 'chart-dates');
-        var tt = [];
-        var topTextGroup = document.createElementNS(Gantt.SVG_NS, 'g');
-        topTextGroup.setAttribute('class', 'chart-dates');
-        this.timeLine.firstTopLabel = document.createElementNS(Gantt.SVG_NS, 'text');
-        this.timeLine.firstTopLabel.textContent = TimeLine.monthTable[startDate.getMonth()] + startDate.getFullYear();
-        this.timeLine.firstTopLabel.setAttribute('y', '20');
-        this.timeLine.firstTopLabel.setAttribute('class', 'chart-dates');
-        this.mainSvgGroup.appendChild(this.timeLine.firstTopLabel);
-        this.timeLine.notches = n;
-        this.timeLine.dateLabels = d;
-        this.timeLine.topLabels = tt;
-        var nextNotchPosition = 0;
-        var startPos = 0;
-        this.timeLine.notchesPositions = [];
-        do {
-            this.timeLine.notchesPositions.push({ date: new Date(drawStartDate.getTime()), position: nextNotchPosition });
-            var isFirst = drawStartDate.getDate() === 1;
-            if (isFirst) {
-                var mt = document.createElementNS(Gantt.SVG_NS, 'text');
-                mt.textContent = TimeLine.monthTable[drawStartDate.getMonth()] + drawStartDate.getFullYear();
-                mt.setAttribute('y', '20');
-                mt.setAttribute('x', '' + (nextNotchPosition + 2));
-                topTextGroup.appendChild(mt);
-                tt.push(mt);
-            }
-            if (Gantt.weekendTable[drawStartDate.getDay()].isWeekend) {
-                nextNotchPosition += Gantt.zoomTable[this.zoomLevel].weekendSpace;
-            }
-            else {
-                var p = document.createElementNS(Gantt.SVG_NS, 'path');
-                p.setAttribute('d', 'M' + nextNotchPosition + ' 40 v-' + (isFirst ? 20 : 10) + ' h1 v' + (isFirst ? 20 : 10) + ' z');
-                n.push(p);
-                notchGroup.appendChild(p);
-                var t = document.createElementNS(Gantt.SVG_NS, 'text');
-                t.textContent = '' + drawStartDate.getDate();
-                t.setAttribute('y', '50');
-                t.setAttribute('x', '' + (nextNotchPosition + 2));
-                dateGroup.appendChild(t);
-                nextNotchPosition += Gantt.zoomTable[this.zoomLevel].notchDistance;
-            }
-            drawStartDate = Gantt.nextDay(drawStartDate);
-            if (startDate.getTime() === drawStartDate.getTime()) {
-                startPos = nextNotchPosition;
-            }
-        } while (nextNotchPosition < this.svgDrawingWidth);
-        this.mainSvgGroup.appendChild(notchGroup);
-        this.mainSvgGroup.appendChild(dateGroup);
-        this.mainSvgGroup.appendChild(topTextGroup);
-        this.svg.appendChild(this.mainSvgGroup);
-        this.svgViewBox[0] = startPos - (delta != null ? delta : 0);
-        this.svgViewBoxTmp = [this.svgViewBox[0], 0, this.containerWidth, this.currentHeight];
-        this.updateFirstTopLabel();
-        this.svg.setAttribute('viewBox', this.svgViewBox.join(' '));
-    };
+    }
     TimeLine.monthTable = [
         'Jan\'', 'Feb\'', 'Mar\'', 'Apr\'', 'May', 'Jun\'', 'Jul\'', 'Aug\'', 'Sep\'', 'Oct\'', 'Nov\'', 'Dec\''
     ];
-    return TimeLine;
-}());
+    exports.TimeLine = TimeLine;
+});
+//# sourceMappingURL=time-line.js.map
