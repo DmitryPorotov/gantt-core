@@ -74,6 +74,6 @@ export const tasks: ITask[] = [
     expand: true,
     color: '#8cb6ce',
     start: new Date('2018-02-05'),
-    duration: 20,
+    duration: 21,
   }
 ];
