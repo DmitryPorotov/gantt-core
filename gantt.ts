@@ -33,7 +33,7 @@ export class Gantt {
     {isWeekend: true}
   ];
 
-  private visibleStartPosition: number;
+  private visibleStartPositionX: number;
 
   private notchesPositions: IPositionAndDate[];
 
@@ -47,9 +47,11 @@ export class Gantt {
 
   private readonly graph: Graph;
 
-  private timeLineDragStartX?: number;
+  private dragStartX?: number;
 
-  private visibleStartPositionTmp?: number;
+  private dragStartY?: number;
+
+  private visibleStartPositionXTmp?: number;
 
   private displayStartDate: Date;
 
@@ -71,10 +73,15 @@ export class Gantt {
     prevDate.setDate(prevDate.getDate() - 1);
     this.displayStartDate = prevDate;
     this.timeLine.onMouseDown = (ev) => {
-      this.timeLineDragStartX = ev.clientX;
-      this.visibleStartPositionTmp = this.visibleStartPosition;
+      this.dragStartX = ev.clientX;
+      this.visibleStartPositionXTmp = this.visibleStartPositionX;
     };
     this.graph = new Graph(this.container);
+    this.graph.onMouseDown = (ev) => {
+      this.dragStartX = ev.clientX;
+      this.dragStartY = ev.clientY;
+      this.visibleStartPositionXTmp = this.visibleStartPositionX;
+    };
     this.init();
     this.subscribeToEvents();
   }
@@ -92,21 +99,21 @@ export class Gantt {
 
   private subscribeToEvents() {
     document.addEventListener('mousemove', ev => {
-      if (typeof this.timeLineDragStartX === 'number') {
-        const dx = ev.clientX - this.timeLineDragStartX;
-        let closestDate = this.findClosestDate(this.visibleStartPosition);
+      if (typeof this.dragStartX === 'number') {
+        const dx = ev.clientX - this.dragStartX;
+        let closestDate = this.findClosestDate(this.visibleStartPositionX);
         if (Math.abs(dx) < 200) {
-          this.visibleStartPosition = this.visibleStartPositionTmp - dx;
-          this.timeLine.onMouseMove(this.visibleStartPosition, closestDate);
-          this.graph.onMouseMove(this.visibleStartPosition);
+          this.visibleStartPositionX = this.visibleStartPositionXTmp - dx;
+          this.timeLine.onMouseMove(this.visibleStartPositionX, closestDate);
+          this.graph.onMouseMove(this.visibleStartPositionX);
         } else {
-          const delta = closestDate.position - this.visibleStartPosition;
+          const delta = closestDate.position - this.visibleStartPositionX;
           this.buildNotchesPositions(closestDate.date);
-          closestDate = this.findClosestDate(this.visibleStartPosition);
+          closestDate = this.findClosestDate(this.visibleStartPositionX);
 
-          this.visibleStartPosition = closestDate.position - delta;
-          this.visibleStartPositionTmp = this.visibleStartPosition;
-          this.timeLineDragStartX = ev.clientX;
+          this.visibleStartPositionX = closestDate.position - delta;
+          this.visibleStartPositionXTmp = this.visibleStartPositionX;
+          this.dragStartX = ev.clientX;
           this.timeLine.redraw(this.notchesPositions, closestDate.date, delta);
           this.graph.redraw(this.notchesPositions, closestDate.date, tasks, delta);
         }
@@ -114,9 +121,9 @@ export class Gantt {
       }
     });
     document.addEventListener('mouseup', () => {
-      if (typeof this.timeLineDragStartX === 'number') {
-        this.timeLineDragStartX = undefined;
-        this.displayStartDate = this.findClosestDate(this.visibleStartPosition).date;
+      if (typeof this.dragStartX === 'number') {
+        this.dragStartX = undefined;
+        this.displayStartDate = this.findClosestDate(this.visibleStartPositionX).date;
         this.buildNotchesPositions(this.displayStartDate);
         this.timeLine.redraw(this.notchesPositions, this.displayStartDate );
         this.graph.redraw(this.notchesPositions, this.displayStartDate, tasks);
@@ -153,7 +160,7 @@ export class Gantt {
       }
       drawStartDate = Gantt.nextDay(drawStartDate);
       if (startDate.getTime() === drawStartDate.getTime()) {
-        this.visibleStartPosition = nextNotchPosition;
+        this.visibleStartPositionX = nextNotchPosition;
       }
     }
     while (nextNotchPosition < this.svgDrawingWidth);

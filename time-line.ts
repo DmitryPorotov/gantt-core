@@ -56,7 +56,7 @@ export class TimeLine {
 
   private subscribeToEvents() {
     this.svg.addEventListener('mousedown', ev => {
-      if (!ev.button) {
+      if (!ev.button && this.onMouseDown) {
         this.onMouseDown(ev);
       }
     });

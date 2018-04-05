@@ -15,6 +15,8 @@ export class Graph {
 
   private tasksFlatArr: ITask[] = [];
 
+  public onMouseDown: (ev: MouseEvent) => void;
+
   public constructor(private container: HTMLElement) {
   }
 
@@ -36,7 +38,16 @@ export class Graph {
     this.svgViewBox = [0, 0, this.containerWidth, this.container.offsetHeight
     - Gantt.timeLineHeight];
     this.container.appendChild(this.svg);
+    this.subscribeToEvents();
     this.redraw(notches, displayStartDate, tasks);
+  }
+
+  private subscribeToEvents() {
+    this.svg.addEventListener('mousedown', ev => {
+      if (!ev.button && this.onMouseDown) {
+        this.onMouseDown(ev);
+      }
+    });
   }
 
   public redraw(notches: IPositionAndDate[], displayStartDate: Date, tasks: ITask[], delta = 0) {

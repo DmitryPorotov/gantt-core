@@ -1,7 +1,7 @@
 {
   "name": "gantt-core",
   "version": "0.0.0",
-  "license": "MIT",
+  "license": "LGPL",
   "dependencies": {
     "@types/requirejs": "^2.1.31",
     "requirejs": "^2.3.5",
