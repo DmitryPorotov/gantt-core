@@ -6,6 +6,7 @@ export interface ITask {
   meeting: boolean;
   expand: boolean;
   start: Date;
+  end?: Date;
   duration: number;
   tasks?: ITask[];
   totalDescendants?: number;
@@ -14,14 +15,27 @@ export interface ITask {
 
 export interface IDependency {
   id: number;
-  type: number;
+  type: TaskType; // 1 - start-start, 2 - start-finish, 3 - finish - finish, 4 finish-start
   difference: number;
-  hardness: string;
+  hardness: 'Rubber' | 'Strong';
 }
 
+export enum TaskType {
+  StartStart = 1,
+  StartFinish,
+  FinishFinish,
+  FinishStart
+}
 
-export interface IPositionAndDate {
+export interface IGraphNotch {
   date: Date;
   position: number;
   isWeekend: boolean;
+  isHoliday: boolean;
+}
+
+export interface INotchesData {
+  notches: IGraphNotch[];
+  graphStartIndex: number;
+  graphStartDate: Date;
 }

@@ -1,5 +1,5 @@
 import { Gantt } from './gantt';
-import { IPositionAndDate } from './types';
+import { IGraphNotch } from './types';
 
 export class TimeLine {
   public static monthTable = [
@@ -62,7 +62,7 @@ export class TimeLine {
     });
   }
 
-  public onMouseMove(visibleStart, closestDate: IPositionAndDate) {
+  public onMouseMove(visibleStart, closestDate: IGraphNotch) {
       this.svg.setAttribute('viewBox', [visibleStart, ...this.svgViewBox.slice(1)].join(' '));
       this.updateFirstTopLabel(visibleStart, closestDate.date);
   }
@@ -86,7 +86,7 @@ export class TimeLine {
     }
   }
 
-  private buildTimeLine(notches: IPositionAndDate[], startDate: Date, delta: number = null) {
+  private buildTimeLine(notches: IGraphNotch[], startDate: Date, delta: number = null) {
     this.mainSvgGroup = document.createElementNS(Gantt.SVG_NS, 'g');
     this.mainSvgGroup.setAttribute('class', 'main-group');
 
@@ -131,7 +131,7 @@ export class TimeLine {
           t.setAttribute('x', '' + (n.position + 2));
           dateGroup.appendChild(t);
         }
-        if (startDate.getTime() === n.date.getTime()) {
+        if (startDate.toDateString() === n.date.toDateString()) {
           startPos = n.position;
         }
     }

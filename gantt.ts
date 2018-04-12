@@ -1,7 +1,7 @@
 import { TimeLine } from './time-line';
-import { tasks } from './mock_data';
+import { tasks2 as __tasks__ } from './mock_data';
 import { Graph } from './graph';
-import { IPositionAndDate } from './types';
+import { IGraphNotch, INotchesData, ITask } from './types';
 
 export class Gantt {
   public static SVG_NS: 'http://www.w3.org/2000/svg' = 'http://www.w3.org/2000/svg';
@@ -35,7 +35,7 @@ export class Gantt {
 
   private visibleStartPositionX: number;
 
-  private notchesPositions: IPositionAndDate[];
+  private notchesData: INotchesData;
 
   public zoomLevel = 2;
 
@@ -55,46 +55,70 @@ export class Gantt {
 
   private displayStartDate: Date;
 
+  private actualStartDate: Date;
+
+  private tasksFlatArr: ITask[] = [];
+
   public static get numWeekends(): number {
     return Gantt.weekendTable.reduce((a, d) => a + (d.isWeekend ? 1 : 0), 0);
   }
 
   private resizeTimeout: number = -1;
 
-  public static nextDay(date: Date): Date {
-    date.setDate(date.getDate() + 1);
-    return date;
+  public static addDay(date: Date, numDays = 1): Date {
+    const d = new Date(date.getTime());
+    d.setDate(d.getDate() + numDays);
+    return d;
   }
 
   public constructor(containerId: string) {
     this.container = document.getElementById(containerId);
-    this.timeLine = new TimeLine(this.container);
-    const prevDate = new Date(tasks[0].start);
+
+    // TODO: this section should be in a separate method
+    this.actualStartDate = __tasks__.reduce(
+        (acc, cv) => (cv.start < acc.start ? cv : acc)
+    ).start;
+    const prevDate = new Date(this.actualStartDate);
     prevDate.setDate(prevDate.getDate() - 1);
     this.displayStartDate = prevDate;
+    // end section
+
+    this.timeLine = new TimeLine(this.container);
+
     this.timeLine.onMouseDown = (ev) => {
-      this.dragStartX = ev.clientX;
-      this.visibleStartPositionXTmp = this.visibleStartPositionX;
+      this.onMouseDown(ev);
     };
     this.graph = new Graph(this.container);
     this.graph.onMouseDown = (ev) => {
-      this.dragStartX = ev.clientX;
+      this.onMouseDown(ev);
       this.dragStartY = ev.clientY;
-      this.visibleStartPositionXTmp = this.visibleStartPositionX;
     };
     this.init();
     this.subscribeToEvents();
   }
 
+  private onMouseDown(ev: MouseEvent) {
+    document.body.classList.add('dragging');
+    this.dragStartX = ev.clientX;
+    this.visibleStartPositionXTmp = this.visibleStartPositionX;
+  }
+
   private init() {
     this.svgDrawingWidth = this.container.offsetWidth + 500;
-    this.buildNotchesPositions(this.displayStartDate);
+
+    this.buildTasksFlatArr(__tasks__);
+    this.buildNotchesPositions(this.displayStartDate, this.actualStartDate);
 
     this.timeLine.destruct();
     this.graph.destruct();
 
-    this.timeLine.init(this.notchesPositions, this.displayStartDate, this.svgDrawingWidth);
-    this.graph.init(this.notchesPositions, this.displayStartDate, tasks, this.svgDrawingWidth);
+    this.timeLine.init(this.notchesData.notches, this.displayStartDate, this.svgDrawingWidth);
+    this.graph.init(
+        this.notchesData,
+        this.displayStartDate,
+        this.tasksFlatArr,
+        this.svgDrawingWidth
+    );
   }
 
   private subscribeToEvents() {
@@ -108,14 +132,14 @@ export class Gantt {
           this.graph.onMouseMove(this.visibleStartPositionX);
         } else {
           const delta = closestDate.position - this.visibleStartPositionX;
-          this.buildNotchesPositions(closestDate.date);
+          this.buildNotchesPositions(closestDate.date, this.actualStartDate);
           closestDate = this.findClosestDate(this.visibleStartPositionX);
 
           this.visibleStartPositionX = closestDate.position - delta;
           this.visibleStartPositionXTmp = this.visibleStartPositionX;
           this.dragStartX = ev.clientX;
-          this.timeLine.redraw(this.notchesPositions, closestDate.date, delta);
-          this.graph.redraw(this.notchesPositions, closestDate.date, tasks, delta);
+          this.timeLine.redraw(this.notchesData.notches, closestDate.date, delta);
+          this.graph.redraw(this.notchesData, closestDate.date, this.tasksFlatArr, delta);
         }
         this.displayStartDate = closestDate.date;
       }
@@ -124,10 +148,11 @@ export class Gantt {
       if (typeof this.dragStartX === 'number') {
         this.dragStartX = undefined;
         this.displayStartDate = this.findClosestDate(this.visibleStartPositionX).date;
-        this.buildNotchesPositions(this.displayStartDate);
-        this.timeLine.redraw(this.notchesPositions, this.displayStartDate );
-        this.graph.redraw(this.notchesPositions, this.displayStartDate, tasks);
+        this.buildNotchesPositions(this.displayStartDate, this.actualStartDate);
+        this.timeLine.redraw(this.notchesData.notches, this.displayStartDate );
+        this.graph.redraw(this.notchesData, this.displayStartDate, this.tasksFlatArr);
       }
+      document.body.classList.remove('dragging');
     });
     window.addEventListener('resize', () => {
       clearTimeout(this.resizeTimeout);
@@ -135,50 +160,82 @@ export class Gantt {
     });
   }
 
-  private buildNotchesPositions(startDate: Date) {
-    this.notchesPositions = [];
-    const approxDaysPerScreen = Math.ceil(150 / (
+  private buildNotchesPositions(startDate: Date, actualStartDate: Date) {
+    this.notchesData = {
+      graphStartIndex: -1,
+      graphStartDate: actualStartDate,
+      notches: []
+    };
+    const approxDaysOffScreen = Math.ceil(150 / (
         (Gantt.zoomTable[this.zoomLevel].notchDistance * (7 - Gantt.numWeekends) +
             Gantt.zoomTable[this.zoomLevel].weekendSpace * Gantt.numWeekends) / 7
     )) + 3;
 
     let drawStartDate = new Date(startDate.getTime());
-    drawStartDate.setDate(drawStartDate.getDate() - approxDaysPerScreen);
+    drawStartDate.setDate(drawStartDate.getDate() - approxDaysOffScreen);
 
     let nextNotchPosition = 0;
     do {
-      const notch = {
+      const notch: IGraphNotch = {
         date: new Date(drawStartDate.getTime()),
         position: nextNotchPosition,
-        isWeekend: Gantt.weekendTable[drawStartDate.getDay()].isWeekend
+        isWeekend: Gantt.weekendTable[drawStartDate.getDay()].isWeekend,
+        isHoliday: false
       };
-      this.notchesPositions.push(notch);
+      this.notchesData.notches.push(notch);
       if (notch.isWeekend) {
         nextNotchPosition += Gantt.zoomTable[this.zoomLevel].weekendSpace;
       } else {
         nextNotchPosition += Gantt.zoomTable[this.zoomLevel].notchDistance;
       }
-      drawStartDate = Gantt.nextDay(drawStartDate);
-      if (startDate.getTime() === drawStartDate.getTime()) {
+      drawStartDate = Gantt.addDay(drawStartDate);
+      if (startDate.toDateString() === drawStartDate.toDateString()) {
         this.visibleStartPositionX = nextNotchPosition;
+      }
+      if (drawStartDate.toDateString() === actualStartDate.toDateString()) {
+        this.notchesData.graphStartIndex = this.notchesData.notches.length - 1;
       }
     }
     while (nextNotchPosition < this.svgDrawingWidth);
   }
 
-  private findClosestDate(point: number): IPositionAndDate {
+  private findClosestDate(point: number): IGraphNotch {
     let minDist = Number.POSITIVE_INFINITY;
-    let res: IPositionAndDate;
-    for (let i = 0; i < this.notchesPositions.length; ++i) {
-      const cur = Math.abs(this.notchesPositions[i].position - point);
+    let res: IGraphNotch;
+    for (let i = 0; i < this.notchesData.notches.length; ++i) {
+      const cur = Math.abs(this.notchesData.notches[i].position - point);
       if (cur < minDist) {
         minDist = cur;
       } else {
-        res = this.notchesPositions[i - 1];
+        res = this.notchesData.notches[i - 1];
         break;
       }
     }
     return res;
+  }
+
+  private buildTasksFlatArr(tasks_: ITask[]) {
+    this.tasksFlatArr = [];
+    this.recBuildTasksFlatArr(tasks_);
+    for (const t of this.tasksFlatArr) {
+      let nextDay = t.start;
+      for (let dur = t.duration - 1; dur;) {
+        nextDay = Gantt.addDay(nextDay);
+        if (!Gantt.weekendTable[nextDay.getDay()].isWeekend) {
+          --dur;
+        }
+      }
+      t.end = nextDay;
+    }
+  }
+
+  private recBuildTasksFlatArr(tasks: ITask[]) {
+    for (const t of tasks) {
+      this.tasksFlatArr.push(t);
+      if (t.tasks) {
+        this.recBuildTasksFlatArr(t.tasks);
+      }
+    }
   }
 
 }

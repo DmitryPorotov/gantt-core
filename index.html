@@ -8,7 +8,7 @@
         g.chart-dates text, .chart-dates {
             font-size: 12px;
         }
-        .draggable {
+        svg.draggable {
             -webkit-touch-callout: none; /* iOS Safari */
             -webkit-user-select: none; /* Safari */
             -khtml-user-select: none; /* Konqueror HTML */
@@ -16,7 +16,15 @@
             -ms-user-select: none; /* Internet Explorer/Edge */
             user-select: none; /* Non-prefixed version, currently
                                   supported by Chrome and Opera */
-            cursor: move;
+            cursor: -webkit-grab;
+            cursor: -moz-grab;
+            cursor: grab;
+        }
+        body.dragging * {
+            cursor: move !important;
+        }
+        .clickable {
+            cursor: pointer;
         }
     </style>
     <script data-main="/gantt-core/" src="node_modules/requirejs/require.js"></script>
