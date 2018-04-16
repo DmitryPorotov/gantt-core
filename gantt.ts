@@ -2,9 +2,9 @@ import { TimeLine } from './time-line';
 import { tasks2 as __tasks__ } from './mock_data';
 import { Graph } from './graph';
 import { IGraphNotch, INotchesData, ITask } from './types';
+import { Utilities as ut } from './utilities';
 
 export class Gantt {
-  public static SVG_NS: 'http://www.w3.org/2000/svg' = 'http://www.w3.org/2000/svg';
 
   public static zoomTable: { notchDistance: number, weekendSpace: number }[] = [
     {
@@ -21,6 +21,8 @@ export class Gantt {
     }
   ];
 
+  public static zoomLevel: number = 2;
+
   public static timeLineHeight = 60;
 
   public static weekendTable = [
@@ -33,11 +35,13 @@ export class Gantt {
     {isWeekend: true}
   ];
 
+  public static get currentZoom() {
+    return Gantt.zoomTable[Gantt.zoomLevel];
+  }
+
   private visibleStartPositionX: number;
 
   private notchesData: INotchesData;
-
-  public zoomLevel = 2;
 
   public svgDrawingWidth: number;
 
@@ -64,12 +68,6 @@ export class Gantt {
   }
 
   private resizeTimeout: number = -1;
-
-  public static addDay(date: Date, numDays = 1): Date {
-    const d = new Date(date.getTime());
-    d.setDate(d.getDate() + numDays);
-    return d;
-  }
 
   public constructor(containerId: string) {
     this.container = document.getElementById(containerId);
@@ -167,8 +165,8 @@ export class Gantt {
       notches: []
     };
     const approxDaysOffScreen = Math.ceil(150 / (
-        (Gantt.zoomTable[this.zoomLevel].notchDistance * (7 - Gantt.numWeekends) +
-            Gantt.zoomTable[this.zoomLevel].weekendSpace * Gantt.numWeekends) / 7
+        (Gantt.currentZoom.notchDistance * (7 - Gantt.numWeekends) +
+            Gantt.currentZoom.weekendSpace * Gantt.numWeekends) / 7
     )) + 3;
 
     let drawStartDate = new Date(startDate.getTime());
@@ -184,11 +182,11 @@ export class Gantt {
       };
       this.notchesData.notches.push(notch);
       if (notch.isWeekend) {
-        nextNotchPosition += Gantt.zoomTable[this.zoomLevel].weekendSpace;
+        nextNotchPosition += Gantt.currentZoom.weekendSpace;
       } else {
-        nextNotchPosition += Gantt.zoomTable[this.zoomLevel].notchDistance;
+        nextNotchPosition += Gantt.currentZoom.notchDistance;
       }
-      drawStartDate = Gantt.addDay(drawStartDate);
+      drawStartDate = ut.addDay(drawStartDate);
       if (startDate.toDateString() === drawStartDate.toDateString()) {
         this.visibleStartPositionX = nextNotchPosition;
       }
@@ -220,7 +218,7 @@ export class Gantt {
     for (const t of this.tasksFlatArr) {
       let nextDay = t.start;
       for (let dur = t.duration - 1; dur;) {
-        nextDay = Gantt.addDay(nextDay);
+        nextDay = ut.addDay(nextDay);
         if (!Gantt.weekendTable[nextDay.getDay()].isWeekend) {
           --dur;
         }
