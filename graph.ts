@@ -18,48 +18,9 @@ export class Graph {
   private buildTasks(notchesData: INotchesData, tasks: ITask[]): WrappedSVGElement {
     const tasksGroup: WrappedSVGElement =  ut.ca_('g'),
         depArrowsG: WrappedSVGElement = ut.ca_('g');
-    for (let j = 0; j < tasks.length; ++j) {
-      const t = tasks[j],
+    for (let currentTaskIdx = 0; currentTaskIdx < tasks.length; ++currentTaskIdx) {
+      const t = tasks[currentTaskIdx],
           dependencies: IDependencyWrapper[] = [];
-
-      if (t.depend) {
-        for (const d of t.depend) {
-          for (let k = 0; k < tasks.length; ++k) {
-            if (tasks[k].id === d.id) {
-
-              const dayDur = 1000 * 3600 * 24;
-              let skip: number;
-
-              switch (d.type) {
-                case (TaskType.StartStart):
-                  skip = Math.round((tasks[k].start.getTime() - t.start.getTime()) / dayDur);
-                  break;
-                case (TaskType.StartFinish):
-                  skip = Math.round((tasks[k].start.getTime() - t.end.getTime()) / dayDur) - 1;
-                  break;
-                case (TaskType.FinishFinish):
-                  skip = Math.round((tasks[k].end.getTime() - t.end.getTime()) / dayDur);
-                  break;
-                case (TaskType.FinishStart):
-                  skip = Math.round((tasks[k].end.getTime() - t.start.getTime()) / dayDur) + 1;
-                  break;
-              }
-
-              if (skip) {
-                for (let numDaysToCheck = Math.abs(skip), day: Date = t.start; numDaysToCheck; --numDaysToCheck) {
-                  day = ut.addDay(day, skip > 0 ? 1 : -1);
-                  if (!Gantt.weekendTable[day.getDay()].isWeekend) {
-                    skip += skip < 0 ? 1 : -1;
-                  }
-                  // TODO: check for holidays too
-                }
-              }
-              const dep = dependencyFactory(d, j, k, skip);
-              dependencies.push(dep);
-            }
-          }
-        }
-      }
 
       let start: IGraphNotch, end: IGraphNotch;
 
@@ -83,40 +44,78 @@ export class Graph {
         end = notchesData.notches[notchesData.notches.length - 1];
       }
 
+      if (t.depend) {
+        for (const d of t.depend) {
+          for (let dependantTaskIdx = 0; dependantTaskIdx < tasks.length; ++dependantTaskIdx) {
+            if (tasks[dependantTaskIdx].id === d.id) {
+
+              const dayDur = 1000 * 3600 * 24;
+              let skip: number;
+
+              switch (d.type) {
+                case (TaskType.StartStart):
+                  skip = Math.round((tasks[dependantTaskIdx].start.getTime() - t.start.getTime()) / dayDur);
+                  break;
+                case (TaskType.StartFinish):
+                  skip = Math.round((tasks[dependantTaskIdx].start.getTime() - t.end.getTime()) / dayDur) - 1;
+                  break;
+                case (TaskType.FinishFinish):
+                  skip = Math.round((tasks[dependantTaskIdx].end.getTime() - t.end.getTime()) / dayDur);
+                  break;
+                case (TaskType.FinishStart):
+                  skip = Math.round((tasks[dependantTaskIdx].end.getTime() - t.start.getTime()) / dayDur) + 1;
+                  break;
+              }
+
+              if (skip) {
+                for (let numDaysToCheck = Math.abs(skip), day: Date = t.start; numDaysToCheck; --numDaysToCheck) {
+                  day = ut.addDay(day, skip > 0 ? 1 : -1);
+                  if (!Gantt.weekendTable[day.getDay()].isWeekend) {
+                    skip += skip < 0 ? 1 : -1;
+                  }
+                  // TODO: check for holidays too
+                }
+              }
+              const dep = dependencyFactory(d, currentTaskIdx, dependantTaskIdx, t.duration, skip, start.position);
+              dependencies.push(dep);
+            }
+          }
+        }
+      }
+
       const notchDist = Gantt.currentZoom.notchDistance;
       if (start && end) {
-        let c;
+        let completion;
         const g = ut.ca_('g'),
-            p = ut.ca_('path')
+            task = ut.ca_('path')
                 .sa_('fill', t.color || '#8cb6ce')
                 .sa_('class', 'clickable');
         if (!t.tasks) {
-          p.sa_('stroke', 'black')
+          task.sa_('stroke', 'black')
               .sa_('stroke-width', '1')
-              .sa_('d', `M${start.position} ${(j * 20) + 4} H${end.position + notchDist} v13 H${start.position} z`);
+              .sa_('d', `M${start.position} ${(currentTaskIdx * 20) + 4} H${end.position + notchDist} v13 H${start.position} z`);
           if (t.complete) {
-            c = ut.ca_('path')
+            completion = ut.ca_('path')
               .sa_('fill', 'black')
               .sa_('d',
-              `M${start.position} ${(j * 20) + 9} h${(end.position - start.position + notchDist) / 100 * t.complete}`
+              `M${start.position} ${(currentTaskIdx * 20) + 9} h${(end.position - start.position + notchDist) / 100 * t.complete}`
               + ` v2 H${start.position} z`);
           }
         } else {
-          p.sa_('d',
-              `M${start.position} ${(j * 20) + 4} H${end.position + notchDist} v12 l-7 -7 L${start.position + 7} ${(j * 20) + 9}`
-              + ` l-7 7 z`);
+          task.sa_('d',
+              `M${start.position} ${(currentTaskIdx * 20) + 4} H${end.position + notchDist} v12 l-7 -7`
+              + `L${start.position + 7} ${(currentTaskIdx * 20) + 9} l-7 7 z`);
         }
 
         if (dependencies.length) {
           for (const d of dependencies) {
-            d.startPositionX = end.position;
             depArrowsG.ac_(d.buildArrow());
           }
         }
 
-        g.ac_(p);
-        if (c) {
-          g.ac_(c);
+        g.ac_(task);
+        if (completion) {
+          g.ac_(completion);
         }
         tasksGroup.ac_(g);
       }
@@ -139,6 +138,7 @@ export class Graph {
     this.containerWidth = this.container.offsetWidth;
     this.svgDrawingWidth = svgDrawingWidth;
     this.svg = ut.ca_('svg')
+        .sa_('style', 'margin-top:-4px;')
         .sa_('class', 'draggable')
         .sa_('height', this.container.offsetHeight
         - Gantt.timeLineHeight + 'px')

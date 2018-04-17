@@ -3,7 +3,6 @@ import { Gantt } from './gantt';
 import { Utilities as ut, WrappedSVGElement } from './utilities';
 
 export interface IDependencyWrapper extends IDependency {
-  startPositionX: number;
   buildArrow(): WrappedSVGElement;
 }
 
@@ -11,17 +10,19 @@ export function dependencyFactory(
     dependency: IDependency,
     fromRow: number,
     toRow: number,
-    numWeekendsToSkip: number
+    taskDuration: number,
+    numWeekendsToSkip: number,
+    startPositionX: number
 ): IDependencyWrapper {
   switch (dependency.type) {
     case (TaskType.StartStart):
-      return new StartStartDependency(dependency, fromRow, toRow, numWeekendsToSkip);
+      return new StartStartDependency(dependency, fromRow, toRow, taskDuration, numWeekendsToSkip, startPositionX);
     case (TaskType.StartFinish):
-      return new StartFinishDependency(dependency, fromRow, toRow, numWeekendsToSkip);
+      return new StartFinishDependency(dependency, fromRow, toRow, taskDuration, numWeekendsToSkip, startPositionX);
     case (TaskType.FinishFinish):
-      return new FinishFinishDependency(dependency, fromRow, toRow, numWeekendsToSkip);
+      return new FinishFinishDependency(dependency, fromRow, toRow, taskDuration, numWeekendsToSkip, startPositionX);
     case (TaskType.FinishStart):
-      return new FinishStartDependency(dependency, fromRow, toRow, numWeekendsToSkip);
+      return new FinishStartDependency(dependency, fromRow, toRow, taskDuration, numWeekendsToSkip, startPositionX);
   }
 }
 
@@ -31,11 +32,6 @@ abstract class BaseDependencyWrapper implements IDependencyWrapper {
   public id: number;
   public type: TaskType;
 
-  public set startPositionX(val: number) {
-    this._startPositionX = val;
-  }
-
-  protected _startPositionX: number;
   protected _arrow: WrappedSVGElement;
   protected _arrowLine: WrappedSVGElement;
   protected _arrowHead: WrappedSVGElement;
@@ -49,7 +45,9 @@ abstract class BaseDependencyWrapper implements IDependencyWrapper {
       dependency: IDependency,
       protected _fromRow: number,
       protected _toRow: number,
-      protected _numWeekendsToSkip: number
+      protected _taskDuration: number,
+      protected _numWeekendsToSkip: number,
+      protected _startPositionX: number
   ) {
     this.difference = dependency.difference;
     this.hardness = dependency.hardness;
@@ -98,7 +96,8 @@ class StartStartDependency extends BaseDependencyWrapper {
 
 class StartFinishDependency extends BaseDependencyWrapper {
   protected _buildArrow() {
-    const startPosX =  this._startPositionX + Gantt.currentZoom.notchDistance,
+    const startPosX =  this._startPositionX
+        + (Gantt.currentZoom.notchDistance * this. _taskDuration),
           dx = Gantt.currentZoom.weekendSpace * this._numWeekendsToSkip + (this.difference * Gantt.currentZoom.notchDistance) + 3;
     this._arrowLine.sa_('d', `M${startPosX} ${this._startPositionY}, h${dx} v${this._deltaY}`);
     this.buildArrowHead(startPosX + dx);
@@ -107,7 +106,7 @@ class StartFinishDependency extends BaseDependencyWrapper {
 
 class FinishFinishDependency extends BaseDependencyWrapper {
   protected _buildArrow() {
-    const startPosX =  this._startPositionX + Gantt.currentZoom.notchDistance,
+    const startPosX =  this._startPositionX + (Gantt.currentZoom.notchDistance * this. _taskDuration),
         dx = Gantt.currentZoom.weekendSpace * this._numWeekendsToSkip + (this.difference * Gantt.currentZoom.notchDistance) - 3;
     this._arrowLine.sa_('d', `M${startPosX} ${this._startPositionY}, h${dx} v${this._deltaY}`);
     this.buildArrowHead(startPosX + dx);

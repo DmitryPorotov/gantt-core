@@ -115,7 +115,7 @@ export const tasks2: ITask[] = [
         expand: true,
         complete: 21,
         start: new Date('2018-02-02'),
-        duration: 1,
+        duration: 2,
         depend: [
           {
             id: 2,
@@ -138,7 +138,7 @@ export const tasks2: ITask[] = [
         meeting: false,
         expand: true,
         color: '#8cb6ce',
-        start: new Date('2018-02-05'),
+        start: new Date('2018-02-06'),
         duration: 2,
         tasks: [
           {
@@ -147,7 +147,7 @@ export const tasks2: ITask[] = [
             complete: 0,
             meeting: false,
             expand: true,
-            start: new Date('2018-02-05'),
+            start: new Date('2018-02-06'),
             duration: 1,
             depend: [
               {
@@ -166,7 +166,7 @@ export const tasks2: ITask[] = [
             complete: 0,
             meeting: false,
             expand: true,
-            start: new Date('2018-02-06'),
+            start: new Date('2018-02-07'),
             duration: 1
           }
         ]
@@ -180,7 +180,7 @@ export const tasks2: ITask[] = [
     meeting: false,
     expand: true,
     color: '#8cb6ce',
-    start: new Date('2018-02-05'),
+    start: new Date('2018-02-06'),
     duration: 1,
     depend: [
       {
@@ -204,7 +204,7 @@ export const tasks2: ITask[] = [
     meeting: false,
     expand: true,
     color: '#8cb6ce',
-    start: new Date('2018-02-08'),
+    start: new Date('2018-02-09'),
     duration: 1
   },
   {
@@ -215,12 +215,12 @@ export const tasks2: ITask[] = [
     expand: true,
     color: '#8cb6ce',
     start: new Date('2018-02-05'),
-    duration: 1,
+    duration: 2,
     depend: [
       {
         id: 23,
         type: 3,
-        difference: 1,
+        difference: 0,
         hardness: 'Strong'
       }
     ]
@@ -276,7 +276,7 @@ export const tasks2: ITask[] = [
       {
         id: 46,
         type: TaskType.StartStart,
-        difference: 5,
+        difference: 6,
         hardness: 'Strong'
       }
     ]
@@ -288,7 +288,7 @@ export const tasks2: ITask[] = [
     meeting: false,
     expand: true,
     color: '#8cb6ce',
-    start: new Date('2018-02-12'),
+    start: new Date('2018-02-13'),
     duration: 1
   },
 ];
