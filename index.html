@@ -16,26 +16,33 @@
             -ms-user-select: none; /* Internet Explorer/Edge */
             user-select: none; /* Non-prefixed version, currently
                                   supported by Chrome and Opera */
-            cursor: -webkit-grab;
-            cursor: -moz-grab;
-            cursor: grab;
+            /*cursor: -webkit-grab;*/
+            /*cursor: -moz-grab;*/
+            /*cursor: grab;*/
         }
-        body.dragging * {
-            cursor: move !important;
+        g.chart-dates text.bottom-notch-text {
+            font-size: 10px;
         }
-        .clickable {
-            cursor: pointer;
+        g.chart-dates text.bottom-notch-sub-text {
+            font-size: 8px;
+            fill: rgb(136, 136, 136);
         }
+        /*body.dragging * {*/
+            /*cursor: move !important;*/
+        /*}*/
+        /*.clickable {*/
+            /*cursor: pointer;*/
+        /*}*/
     </style>
     <script data-main="/gantt-core/" src="node_modules/requirejs/require.js"></script>
 </head>
 <body>
-<div id="container">
+<div id="container" style="margin: 50px; height: 300px;">
 
 </div>
 <script type="application/javascript">
     requirejs(['gantt'], function (gantt) {
-        new gantt.Gantt("container");
+        g = new gantt.Gantt("container");
     });
 </script>
 </body>
