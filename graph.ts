@@ -1,7 +1,8 @@
-import { IGraphNotch, INotchesData, ITask, TaskType } from './types';
+import { IGraphNotch, INotchesData } from './types';
 import { Gantt } from './gantt';
-import { dependencyFactory, IDependencyWrapper } from './dependency';
 import { Utilities as ut, WrappedSVGElement } from './utilities';
+import { Task } from './task';
+import { TempDependency } from './dependency';
 
 export class Graph {
 
@@ -13,113 +14,85 @@ export class Graph {
 
   private svgViewBox: number[] = [];
 
+  private tempDependency: TempDependency;
+  private fromTask: Task;
+
+  private currentStartY = 0;
+
+  public isDragged = false;
+
+  public isVerticallyDraggable = false;
+
   public onMouseDown: (ev: MouseEvent) => void;
 
-  private buildTasks(notchesData: INotchesData, tasks: ITask[]): WrappedSVGElement {
-    const tasksGroup: WrappedSVGElement =  ut.ca_('g'),
-        depArrowsG: WrappedSVGElement = ut.ca_('g');
-    for (let currentTaskIdx = 0; currentTaskIdx < tasks.length; ++currentTaskIdx) {
-      const t = tasks[currentTaskIdx],
-          dependencies: IDependencyWrapper[] = [];
+  public onDependencyAdded: (fromTask: Task, toTask: Task) => void;
 
-      let start: IGraphNotch, end: IGraphNotch;
+  private notchesData: INotchesData;
 
-      for (
-          let i = (notchesData.graphStartIndex !== -1 ? notchesData.graphStartIndex : 0);
-          i < notchesData.notches.length;
-          ++i
-      ) {
-        if (notchesData.notches[i].date.toDateString() === t.start.toDateString()) {
-          start = notchesData.notches[i];
-        }
-        if (notchesData.notches[i].date.toDateString() === t.end.toDateString()) {
-          end = notchesData.notches[i];
-        }
+  private _verticalShift: number = 0;
+
+  private _maxVertShift: number;
+
+  public set verticalShift(val: number) {
+    if (val < 0) {
+      this._verticalShift = 0;
+    } else if (val > this._maxVertShift) {
+      this._verticalShift = this._maxVertShift;
+    } else {
+      this._verticalShift = val;
+    }
+  }
+
+  public get verticalShift() {
+    return this._verticalShift;
+  }
+
+  private dateLabel: {
+    group: WrappedSVGElement;
+    arrow: WrappedSVGElement;
+    text: WrappedSVGElement;
+  } = null;
+
+  private buildTasks(tasks: Task[], startPos): WrappedSVGElement {
+
+    const tasksGroup: WrappedSVGElement =  ut.ce_('g'),
+        depArrowsG: WrappedSVGElement = ut.ce_('g');
+    for (const t of tasks) {
+      if (t.isHiddenByParent) {
+        continue;
       }
 
-      if (!start && end) {
-        start = notchesData.notches[0];
-      }
-      if (!end && start) {
-        end = notchesData.notches[notchesData.notches.length - 1];
-      }
+      tasksGroup.ac_(t.buildTask());
 
-      if (t.depend) {
-        for (const d of t.depend) {
-          for (let dependantTaskIdx = 0; dependantTaskIdx < tasks.length; ++dependantTaskIdx) {
-            if (tasks[dependantTaskIdx].id === d.id) {
-
-              const dayDur = 1000 * 3600 * 24;
-              let skip: number;
-
-              switch (d.type) {
-                case (TaskType.StartStart):
-                  skip = Math.round((tasks[dependantTaskIdx].start.getTime() - t.start.getTime()) / dayDur);
-                  break;
-                case (TaskType.StartFinish):
-                  skip = Math.round((tasks[dependantTaskIdx].start.getTime() - t.end.getTime()) / dayDur) - 1;
-                  break;
-                case (TaskType.FinishFinish):
-                  skip = Math.round((tasks[dependantTaskIdx].end.getTime() - t.end.getTime()) / dayDur);
-                  break;
-                case (TaskType.FinishStart):
-                  skip = Math.round((tasks[dependantTaskIdx].end.getTime() - t.start.getTime()) / dayDur) + 1;
-                  break;
-              }
-
-              if (skip) {
-                for (let numDaysToCheck = Math.abs(skip), day: Date = t.start; numDaysToCheck; --numDaysToCheck) {
-                  day = ut.addDay(day, skip > 0 ? 1 : -1);
-                  if (!Gantt.weekendTable[day.getDay()].isWeekend) {
-                    skip += skip < 0 ? 1 : -1;
-                  }
-                  // TODO: check for holidays too
-                }
-              }
-              const dep = dependencyFactory(d, currentTaskIdx, dependantTaskIdx, t.duration, skip, start.position);
-              dependencies.push(dep);
-            }
+      if (t.isVisible) {
+        t.onMouseDown((task, evt) => {
+          this.tempDependency = new TempDependency(evt.offsetX + startPos, evt.offsetY);
+          this.fromTask = task;
+          this.svg.ac_(this.tempDependency.arrow);
+          this.tempDependency.arrow.ael_('mouseup', () => {
+            this.onMouseUp();
+          });
+        });
+        t.onMouseUp((task) => {
+          if (this.fromTask && this.fromTask !== task && this.onDependencyAdded) {
+            this.onDependencyAdded(this.fromTask, task);
           }
-        }
-      }
-
-      const notchDist = Gantt.currentZoom.notchDistance;
-      if (start && end) {
-        let completion;
-        const g = ut.ca_('g'),
-            task = ut.ca_('path')
-                .sa_('fill', t.color || '#8cb6ce')
-                .sa_('class', 'clickable');
-        if (!t.tasks) {
-          task.sa_('stroke', 'black')
-              .sa_('stroke-width', '1')
-              .sa_('d', `M${start.position} ${(currentTaskIdx * 20) + 4} H${end.position + notchDist} v13 H${start.position} z`);
-          if (t.complete) {
-            completion = ut.ca_('path')
-              .sa_('fill', 'black')
-              .sa_('d',
-              `M${start.position} ${(currentTaskIdx * 20) + 9} h${(end.position - start.position + notchDist) / 100 * t.complete}`
-              + ` v2 H${start.position} z`);
-          }
-        } else {
-          task.sa_('d',
-              `M${start.position} ${(currentTaskIdx * 20) + 4} H${end.position + notchDist} v12 l-7 -7`
-              + `L${start.position + 7} ${(currentTaskIdx * 20) + 9} l-7 7 z`);
-        }
-
-        if (dependencies.length) {
-          for (const d of dependencies) {
-            depArrowsG.ac_(d.buildArrow());
-          }
-        }
-
-        g.ac_(task);
-        if (completion) {
-          g.ac_(completion);
-        }
-        tasksGroup.ac_(g);
+          this.onMouseUp();
+        });
       }
     }
+
+    for (const t of tasks) {
+      if (t.wrappedDependencies.length && !t.isHiddenByParent) {
+        for (const d of t.wrappedDependencies) {
+          const arrow = d.buildArrow(t);
+          if (arrow) {
+            depArrowsG.ac_(arrow);
+          }
+        }
+      }
+    }
+
     tasksGroup.ac_(depArrowsG);
     return tasksGroup;
   }
@@ -131,13 +104,14 @@ export class Graph {
     if (this.svg) {
       this.svg.rm_();
       this.svg = null;
+      this.dateLabel = null;
     }
   }
 
-  public init(notches: INotchesData, displayStartDate: Date, tasks: ITask[], svgDrawingWidth: number) {
+  public init(notches: INotchesData, displayStartDate: Date, tasks: Task[], svgDrawingWidth: number) {
     this.containerWidth = this.container.offsetWidth;
     this.svgDrawingWidth = svgDrawingWidth;
-    this.svg = ut.ca_('svg')
+    this.svg = ut.ce_('svg')
         .sa_('style', 'margin-top:-4px;')
         .sa_('class', 'draggable')
         .sa_('height', this.container.offsetHeight
@@ -147,6 +121,18 @@ export class Graph {
     - Gantt.timeLineHeight];
     this.container.appendChild(this.svg.element);
     this.subscribeToEvents();
+    if (!this.dateLabel) {
+      this.dateLabel = {
+        group: ut.ce_('g'),
+        arrow: ut.ce_('path').sa_('fill', '#000'),
+        text: ut.ce_('text').sa_('font-size', '12')
+      };
+      this.dateLabel.group
+          .ac_(this.dateLabel.arrow)
+          .ac_(this.dateLabel.text);
+      this.dateLabel.text.sa_('y', '15');
+      this.svg.ac_(this.dateLabel.group);
+    }
     this.redraw(notches, displayStartDate, tasks);
   }
 
@@ -154,38 +140,44 @@ export class Graph {
     this.svg.ael_('mousedown', ev => {
       if (!ev.button && this.onMouseDown) {
         this.onMouseDown(ev);
+        this.isDragged = true;
       }
     });
   }
 
-  public redraw(notches: INotchesData, displayStartDate: Date, tasks: ITask[], delta = 0) {
+  public redraw(notches: INotchesData, displayStartDate: Date, tasks: Task[], delta = 0) {
     if (this.mainSvgGroup) {
       this.mainSvgGroup.rm_();
       this.mainSvgGroup = null;
     }
-    this.buildGraph(notches, displayStartDate, tasks, delta);
+    this.notchesData = notches;
+    this.buildGraph(displayStartDate, tasks, delta);
   }
 
-  private buildGraph(notchesData: INotchesData, startDate: Date, tasks: ITask[], delta: number = null) {
-    this.mainSvgGroup = ut.ca_('g')
+  private buildGraph(startDate: Date, tasks: Task[], delta: number = 0) {
+    this.mainSvgGroup = ut.ce_('g')
         .sa_('class', 'main-group');
 
-    const horizontalLines = ut.ca_('g');
-    const verticalLines = ut.ca_('g');
+    const horizontalLines = ut.ce_('g'),
+        verticalLines = ut.ce_('g'),
+        numTasks = tasks.reduce((acc, cv) => {
+          return acc + (cv.isHiddenByParent ? 0 : 1);
+        }, 0),
+        weekendDayWidth = Gantt.currentZoom.weekendSpace,
+        heightByTasks = 20 * numTasks,
+        heightByContainer = this.container.offsetHeight - Gantt.timeLineHeight,
+        height = Math.max(heightByContainer, heightByTasks);
+    this._maxVertShift = heightByTasks - heightByContainer;
+    this.isVerticallyDraggable = heightByTasks > heightByContainer;
 
-
-    const numTasks = tasks.length;
-
-    const weekendDayWidth = Gantt.currentZoom.weekendSpace;
-    const height = this.container.offsetHeight - Gantt.timeLineHeight;
     let startPos = 0;
-    for (const n of notchesData.notches) {
+    for (const n of this.notchesData.notches) {
       if (Gantt.weekendTable[n.date.getDay()].isWeekend) {
-        const line = ut.ca_('path')
+        const line = ut.ce_('path')
             .sa_('fill', 'black')
             .sa_('fill-opacity', '0.1')
             .sa_('d'
-            , `M${n.position} 0 h${weekendDayWidth} v${height} h-${weekendDayWidth} z`);
+            , `M${n.position} 0h${weekendDayWidth}v${height}h-${weekendDayWidth}z`);
         verticalLines.ac_(line);
       }
       if (n.date.getTime() === startDate.getTime()) {
@@ -194,23 +186,74 @@ export class Graph {
     }
 
     for (let i = 1; i <= numTasks; ++i) {
-      const line = ut.ca_('path')
+      const line = ut.ce_('path')
           .sa_('fill', 'black')
-          .sa_('d', `M0 ${i * 20} h${this.svgDrawingWidth} v1 H0 z`);
+          .sa_('d', `M0 ${i * 20}h${this.svgDrawingWidth}v1H0z`);
       horizontalLines.ac_(line);
     }
 
     this.mainSvgGroup.ac_(verticalLines)
         .ac_(horizontalLines)
-        .ac_(this.buildTasks(notchesData, tasks));
+        .ac_(this.buildTasks(tasks, startPos));
 
     this.svgViewBox[0] = startPos
         - (delta != null ? delta : 0);
-    this.svg.ac_(this.mainSvgGroup.element)
+    this.svg.pc_(this.mainSvgGroup.element)
         .sa_('viewBox', this.svgViewBox.join(' '));
   }
 
-  public onMouseMove(visibleStart) {
-    this.svg.sa_('viewBox', [visibleStart, ...this.svgViewBox.slice(1)].join(' '));
+  public onMouseMove(visibleStart, evt: MouseEvent, dragStartY = null) {
+    if (this.tempDependency) {
+      this.tempDependency.redraw(evt.offsetX + visibleStart, evt.offsetY);
+    } else {
+      this.svgViewBox[0] = visibleStart;
+      if (this.isVerticallyDraggable && dragStartY !== null) {
+        this.verticalShift = this.currentStartY - ( evt.clientY - dragStartY );
+        this.svgViewBox[1] = this.verticalShift;
+      }
+      this.svg.sa_('viewBox', this.svgViewBox.join(' '));
+    }
+  }
+
+  public drawDate(x: number) {
+        x += this.svgViewBox[0];
+        const notches = this.notchesData.notches;
+    let low = 0, high = notches.length - 1, result: IGraphNotch;
+    try {
+      while (low <= high) {
+        const mid = Math.floor((low + high) / 2);
+        if (notches[mid].position <= x && notches[mid + 1].position >= x) {
+          result = notches[mid];
+          break;
+        } else if ((notches[mid].position) < x) {
+          low = mid + 1;
+        } else {
+          high = mid - 1;
+        }
+      }
+    } catch { }
+
+    if (result) {
+
+      if (this.isDragged) {
+        this.dateLabel.group.sa_('visibility', 'hidden');
+      } else {
+        this.dateLabel.group.sa_('visibility', 'visible');
+      }
+      this.dateLabel.arrow.sa_('d', `M${result.position} ${this.verticalShift} v5h3z`);
+      this.dateLabel.text.sa_('x', `${result.position}`);
+      this.dateLabel.text.sa_('y', `${15 + this.verticalShift}`);
+      this.dateLabel.text.element.textContent = result.date.toLocaleDateString();
+    }
+  }
+
+  public onMouseUp() {
+    this.isDragged = false;
+    this.fromTask = null;
+    this.currentStartY = this.svgViewBox[1];
+    if (this.tempDependency) {
+      this.tempDependency.destruct();
+      this.tempDependency = null;
+    }
   }
 }
