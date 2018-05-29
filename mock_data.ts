@@ -1,4 +1,4 @@
-import { ITask, TaskType } from './types';
+import { ITask, TaskType, TimeLineTasks } from './types';
 
 export const tasks: ITask[] = [
   {
@@ -105,11 +105,11 @@ export const tasks2: ITask[] = [
     meeting: false,
     expand: true,
     start: new Date('2018-02-02'),
-    duration: 3,
+    duration: 4,
     tasks: [
       {
         id: 1,
-        name: 'do more things',
+        name: 'Do more things',
         color: '#ff6666',
         meeting: false,
         expand: true,
@@ -292,3 +292,5 @@ export const tasks2: ITask[] = [
     duration: 1
   },
 ];
+
+export const timeLineTasks: TimeLineTasks = [1];
