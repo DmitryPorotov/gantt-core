@@ -1,27 +1,77 @@
 import { TimeLine } from './time-line';
-import { tasks2 as __tasks__ } from './mock_data';
+import { tasks2 as __tasks__, timeLineTasks as _tlt_ } from './mock_data';
 import { Graph } from './graph';
 import { IGraphNotch, INotchesData, ITask } from './types';
 import { Utilities as ut } from './utilities';
+import { Task } from './task';
+import { Dependency } from './dependency';
 
 export class Gantt {
 
-  public static zoomTable: { notchDistance: number, weekendSpace: number }[] = [
+  public static zoomTable: { notchDistance: number, weekendSpace: number, detail: string }[] = [
     {
-      notchDistance: 0,
-      weekendSpace: 0
+      notchDistance: 65,
+      weekendSpace: 6,
+      detail: 'day-week'
     },
     {
-      notchDistance: 0,
-      weekendSpace: 0
+      notchDistance: 56,
+      weekendSpace: 5,
+      detail: 'day-week'
     },
     {
       notchDistance: 45,
-      weekendSpace: 3
+      weekendSpace: 3,
+      detail: 'day-month'
+    },
+    {
+      notchDistance: 34,
+      weekendSpace: 3,
+      detail: 'day-month'
+    },
+    {
+      notchDistance: 24,
+      weekendSpace: 4,
+      detail: 'week-year'
+    },
+    {
+      notchDistance: 21,
+      weekendSpace: 4,
+      detail: 'week-year'
+    },
+    {
+      notchDistance: 13,
+      weekendSpace: 4,
+      detail: 'week-year'
+    },
+    {
+      notchDistance: 8,
+      weekendSpace: 4,
+      detail: 'week-year'
+    },
+    {
+      notchDistance: 5,
+      weekendSpace: 3,
+      detail: 'month-year'
+    },
+    {
+      notchDistance: 3,
+      weekendSpace: 2,
+      detail: 'month-year'
+    },
+    {
+      notchDistance: 2,
+      weekendSpace: 1,
+      detail: 'month-year'
+    },
+    {
+      notchDistance: 1,
+      weekendSpace: 1,
+      detail: 'month-year'
     }
   ];
 
-  public static zoomLevel: number = 2;
+  public static zoomLevel: number = 4;
 
   public static timeLineHeight = 60;
 
@@ -47,6 +97,12 @@ export class Gantt {
 
   private readonly container: HTMLElement;
 
+  private readonly graphContainer: HTMLElement;
+
+  private readonly tasksContainer: HTMLElement;
+
+  private readonly separatorBar: HTMLElement;
+
   private readonly timeLine: TimeLine;
 
   private readonly graph: Graph;
@@ -63,14 +119,34 @@ export class Gantt {
 
   private tasksFlatArr: ITask[] = [];
 
+  private wrappedTasks: Task[];
+
   public static get numWeekends(): number {
     return Gantt.weekendTable.reduce((a, d) => a + (d.isWeekend ? 1 : 0), 0);
   }
+
+  private tasksWidth: number = 200;
+
+  private tasksWidthTmp?: number;
+
+  private separatorBarWidth = 2;
+
+  private separatorBarDragStart?: number = null;
 
   private resizeTimeout: number = -1;
 
   public constructor(containerId: string) {
     this.container = document.getElementById(containerId);
+
+    this.tasksContainer = document.createElement('div');
+    this.graphContainer = document.createElement('div');
+    this.separatorBar = document.createElement('div');
+
+    this.setContainersStyles();
+
+    this.container.appendChild(this.tasksContainer);
+    this.container.appendChild(this.separatorBar);
+    this.container.appendChild(this.graphContainer);
 
     // TODO: this section should be in a separate method
     this.actualStartDate = __tasks__.reduce(
@@ -79,20 +155,33 @@ export class Gantt {
     const prevDate = new Date(this.actualStartDate);
     prevDate.setDate(prevDate.getDate() - 1);
     this.displayStartDate = prevDate;
+
+    this.buildTasksFlatArr(__tasks__);
+    this.wrapTasks(this.tasksFlatArr);
     // end section
 
-    this.timeLine = new TimeLine(this.container);
+    this.timeLine = new TimeLine(this.graphContainer);
 
     this.timeLine.onMouseDown = (ev) => {
       this.onMouseDown(ev);
+      this.graph.isDragged = true;
     };
-    this.graph = new Graph(this.container);
-    this.graph.onMouseDown = (ev) => {
+    this.graph = new Graph(this.graphContainer);
+    this.graph.onMouseDown = (ev: MouseEvent) => {
       this.onMouseDown(ev);
       this.dragStartY = ev.clientY;
     };
+
     this.init();
     this.subscribeToEvents();
+  }
+
+  private setContainersStyles() {
+    this.tasksContainer.setAttribute('style', `height:100%; float:left; width: ${this.tasksWidth}px;`);
+    this.separatorBar.setAttribute('style', `height:100%; float:left; width: ${
+      this.separatorBarWidth}px; border:1px solid grey; border-radius:3px;`);
+    this.graphContainer.setAttribute('style', `height:100%; float:left; width: calc(100% - ${this.tasksWidth
+    + this.separatorBarWidth + 2}px)`);
   }
 
   private onMouseDown(ev: MouseEvent) {
@@ -102,32 +191,36 @@ export class Gantt {
   }
 
   private init() {
-    this.svgDrawingWidth = this.container.offsetWidth + 500;
+    this.svgDrawingWidth = this.graphContainer.offsetWidth + 500;
 
-    this.buildTasksFlatArr(__tasks__);
     this.buildNotchesPositions(this.displayStartDate, this.actualStartDate);
 
     this.timeLine.destruct();
     this.graph.destruct();
 
-    this.timeLine.init(this.notchesData.notches, this.displayStartDate, this.svgDrawingWidth);
+    this.timeLine.init(
+        this.notchesData.notches,
+        this.displayStartDate,
+        this.wrappedTasks,
+        this.svgDrawingWidth);
     this.graph.init(
         this.notchesData,
         this.displayStartDate,
-        this.tasksFlatArr,
+        this.wrappedTasks,
         this.svgDrawingWidth
     );
+
   }
 
   private subscribeToEvents() {
     document.addEventListener('mousemove', ev => {
-      if (typeof this.dragStartX === 'number') {
+      const isDragging = typeof this.dragStartX === 'number';
+      if (isDragging) {
         const dx = ev.clientX - this.dragStartX;
         let closestDate = this.findClosestDate(this.visibleStartPositionX);
         if (Math.abs(dx) < 200) {
           this.visibleStartPositionX = this.visibleStartPositionXTmp - dx;
           this.timeLine.onMouseMove(this.visibleStartPositionX, closestDate);
-          this.graph.onMouseMove(this.visibleStartPositionX);
         } else {
           const delta = closestDate.position - this.visibleStartPositionX;
           this.buildNotchesPositions(closestDate.date, this.actualStartDate);
@@ -137,25 +230,49 @@ export class Gantt {
           this.visibleStartPositionXTmp = this.visibleStartPositionX;
           this.dragStartX = ev.clientX;
           this.timeLine.redraw(this.notchesData.notches, closestDate.date, delta);
-          this.graph.redraw(this.notchesData, closestDate.date, this.tasksFlatArr, delta);
+          this.graph.redraw(this.notchesData, closestDate.date, this.wrappedTasks, delta);
         }
         this.displayStartDate = closestDate.date;
       }
+      this.graph.onMouseMove(this.visibleStartPositionX, ev, isDragging ? this.dragStartY : null);
+
+      if (this.separatorBarDragStart !== null) {
+        this.updateGraphWidth(ev.clientX);
+      }
     });
     document.addEventListener('mouseup', () => {
+      this.graph.onMouseUp();
       if (typeof this.dragStartX === 'number') {
         this.dragStartX = undefined;
         this.displayStartDate = this.findClosestDate(this.visibleStartPositionX).date;
         this.buildNotchesPositions(this.displayStartDate, this.actualStartDate);
         this.timeLine.redraw(this.notchesData.notches, this.displayStartDate );
-        this.graph.redraw(this.notchesData, this.displayStartDate, this.tasksFlatArr);
+        this.graph.redraw(this.notchesData, this.displayStartDate, this.wrappedTasks);
       }
       document.body.classList.remove('dragging');
+      if (this.separatorBarDragStart !== null) {
+        this.separatorBarDragStart = null;
+      }
     });
     window.addEventListener('resize', () => {
       clearTimeout(this.resizeTimeout);
       this.resizeTimeout = setTimeout(() => { this.init(); }, 100 );
     });
+
+    this.graphContainer.addEventListener('mousemove', (event) => {
+      this.graph.drawDate(event.offsetX);
+    });
+
+    this.separatorBar.addEventListener('mousedown', (event) => {
+      this.tasksWidthTmp = this.tasksWidth;
+      this.separatorBarDragStart = event.clientX;
+    });
+  }
+
+  private updateGraphWidth(currentX: number) {
+    this.tasksWidth = this.tasksWidthTmp + currentX - this.separatorBarDragStart ;
+    this.setContainersStyles();
+    this.init();
   }
 
   private buildNotchesPositions(startDate: Date, actualStartDate: Date) {
@@ -195,6 +312,7 @@ export class Gantt {
       }
     }
     while (nextNotchPosition < this.svgDrawingWidth);
+    this.updateTaskPositions();
   }
 
   private findClosestDate(point: number): IGraphNotch {
@@ -212,28 +330,105 @@ export class Gantt {
     return res;
   }
 
-  private buildTasksFlatArr(tasks_: ITask[]) {
-    this.tasksFlatArr = [];
-    this.recBuildTasksFlatArr(tasks_);
-    for (const t of this.tasksFlatArr) {
-      let nextDay = t.start;
-      for (let dur = t.duration - 1; dur;) {
+  private wrapTasks(flatTasksArr: ITask[]) {
+    const tasks: Task[] = [],
+        tmpHashTbl = [];
+    for (let i = 0, j = 0, numHiddenTasks = 0; i < flatTasksArr.length; ++i) {
+      const wrappedTask = new Task(flatTasksArr[i], j);
+      tasks.push(wrappedTask);
+      tmpHashTbl[flatTasksArr[i].id] = wrappedTask;
+
+      numHiddenTasks -= (wrappedTask.isHiddenByParent = !!numHiddenTasks) as any;
+
+      j += !wrappedTask.isHiddenByParent as any;
+
+      if (!wrappedTask.expand) {
+        numHiddenTasks = wrappedTask.totalDescendants;
+      }
+
+      let nextDay = tasks[i].start;
+      for (let dur = tasks[i].duration - 1; dur;) {
         nextDay = ut.addDay(nextDay);
         if (!Gantt.weekendTable[nextDay.getDay()].isWeekend) {
           --dur;
         }
       }
-      t.end = nextDay;
+      tasks[i].end = nextDay;
+    }
+
+    for (const t of tasks) {
+      if (t.depend) {
+        for (const d of t.depend) {
+          t.wrappedDependencies.push(new Dependency(d, tmpHashTbl[d.id]));
+        }
+      }
+      if (_tlt_.indexOf(t.id) > -1) {
+        t.isInTimeLine = true;
+      }
+    }
+
+    this.wrappedTasks = tasks;
+  }
+
+  private updateTaskPositions() {
+    for (const t of this.wrappedTasks) {
+
+      let start: IGraphNotch, end: IGraphNotch;
+
+      if (t.start < this.notchesData.notches[0].date) {
+        start = this.notchesData.notches[0];
+      } else if (t.start > this.notchesData.notches[this.notchesData.notches.length - 1].date) {
+        start = this.notchesData.notches[this.notchesData.notches.length - 1];
+      }
+
+      if (t.end < this.notchesData.notches[0].date) {
+        end = this.notchesData.notches[0];
+      } else if (t.end > this.notchesData.notches[this.notchesData.notches.length - 1].date) {
+        end = this.notchesData.notches[this.notchesData.notches.length - 1];
+      }
+
+      if (!(start && end)) {
+        for (
+            let i = (this.notchesData.graphStartIndex !== -1 ? this.notchesData.graphStartIndex : 0);
+            i < this.notchesData.notches.length;
+            ++i
+        ) {
+
+          if (!start && this.notchesData.notches[i].date.toDateString() === t.start.toDateString()) {
+            start = this.notchesData.notches[i];
+          }
+
+          if (!end && this.notchesData.notches[i].date.toDateString() === t.end.toDateString()) {
+            end = this.notchesData.notches[i];
+          }
+        }
+      } else {
+        t.isVisible = false;
+      }
+
+
+      t.startPositionX = start.position;
+      t.endPositionX = end.position + Gantt.currentZoom.notchDistance;
     }
   }
 
+  private buildTasksFlatArr(tasks_: ITask[]) {
+    this.tasksFlatArr = [];
+    this.recBuildTasksFlatArr(tasks_);
+  }
+
   private recBuildTasksFlatArr(tasks: ITask[]) {
+    let numTasks = 0;
     for (const t of tasks) {
       this.tasksFlatArr.push(t);
       if (t.tasks) {
-        this.recBuildTasksFlatArr(t.tasks);
+         numTasks += this.recBuildTasksFlatArr(t.tasks);
+         t.totalDescendants = numTasks;
+      } else {
+        t.totalDescendants = 0;
       }
     }
+    return tasks.length + numTasks;
   }
 
 }
