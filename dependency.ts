@@ -1,122 +1,137 @@
 import { IDependency, TaskType } from './types';
-import { Gantt } from './gantt';
 import { Utilities as ut, WrappedSVGElement } from './utilities';
+import { Task } from './task';
 
-export interface IDependencyWrapper extends IDependency {
-  buildArrow(): WrappedSVGElement;
-}
-
-export function dependencyFactory(
-    dependency: IDependency,
-    fromRow: number,
-    toRow: number,
-    taskDuration: number,
-    numWeekendsToSkip: number,
-    startPositionX: number
-): IDependencyWrapper {
-  switch (dependency.type) {
-    case (TaskType.StartStart):
-      return new StartStartDependency(dependency, fromRow, toRow, taskDuration, numWeekendsToSkip, startPositionX);
-    case (TaskType.StartFinish):
-      return new StartFinishDependency(dependency, fromRow, toRow, taskDuration, numWeekendsToSkip, startPositionX);
-    case (TaskType.FinishFinish):
-      return new FinishFinishDependency(dependency, fromRow, toRow, taskDuration, numWeekendsToSkip, startPositionX);
-    case (TaskType.FinishStart):
-      return new FinishStartDependency(dependency, fromRow, toRow, taskDuration, numWeekendsToSkip, startPositionX);
-  }
-}
-
-abstract class BaseDependencyWrapper implements IDependencyWrapper {
+export class Dependency implements IDependency {
   public difference: number;
   public hardness: 'Rubber' | 'Strong';
   public id: number;
   public type: TaskType;
 
-  protected _arrow: WrappedSVGElement;
-  protected _arrowLine: WrappedSVGElement;
-  protected _arrowHead: WrappedSVGElement;
-  protected _startPositionY: number;
-  protected _directionY: 1 | -1;
-  protected _deltaY: number;
-
-  protected abstract _buildArrow(): void;
-
   public constructor(
       dependency: IDependency,
-      protected _fromRow: number,
-      protected _toRow: number,
-      protected _taskDuration: number,
-      protected _numWeekendsToSkip: number,
-      protected _startPositionX: number
+      public dependantTask: Task
   ) {
     this.difference = dependency.difference;
     this.hardness = dependency.hardness;
     this.id = dependency.id;
     this.type = dependency.type;
-    this._startPositionY = (_fromRow * 20) + 10;
-    this._directionY = this._toRow > this._fromRow ? -1 : 1;
-    this._deltaY = 20 * (this._toRow - this._fromRow) + 13 * this._directionY;
+
   }
 
-  public buildArrow(): WrappedSVGElement {
-    this._arrowLine = ut.ca_('path')
+  public buildArrow(parentTask: Task) {
+    if (this.dependantTask.isHiddenByParent) {
+      return null;
+    }
+    let startX: number,
+        endX: number,
+        doHook = false;
+    switch (this.type) {
+      case (TaskType.StartStart):
+        startX = parentTask.startPositionX;
+        endX = this.dependantTask.startPositionX;
+        doHook = startX <= endX;
+        break;
+      case (TaskType.FinishStart):
+        startX = parentTask.endPositionX;
+        endX = this.dependantTask.startPositionX;
+        break;
+      case (TaskType.FinishFinish):
+        startX = parentTask.endPositionX;
+        endX = this.dependantTask.endPositionX;
+        doHook = startX >= endX;
+        break;
+      case (TaskType.StartFinish):
+        startX = parentTask.startPositionX;
+        endX = this.dependantTask.endPositionX;
+        break;
+    }
+
+    return this.buildArrowLine(startX, endX, parentTask.index, this.dependantTask.index, doHook);
+  }
+
+  private buildArrowLine(startX: number, endX: number, startRow: number, endRow: number, doHook: boolean) {
+    let line, arrowHead;
+    const arrowG = ut.ce_('g')
+        .ac_(
+        line = ut.ce_('path')
+            .sa_('stroke', '#000')
+            .sa_('stroke-width', '1')
+            .sa_('fill-opacity', '0')
+        )
+        .ac_(
+        arrowHead = ut.ce_('path')
+            .sa_('stroke', '#000')
+            .sa_('stroke-width', '1')
+        );
+
+    if ('Rubber' === this.hardness) {
+      line.sa_('stroke-dasharray', '5, 5');
+    }
+
+    let lineD = `M${startX} ${startRow * 20 + 10}`,
+        arrowHeadD: string,
+        realEndX: number,
+        realEndY: number,
+        dir: number;
+    if (doHook) {
+      realEndX = endX + (this.type === TaskType.StartStart ? -6 : 6);
+      realEndY = endRow * 20 + 10;
+      dir = this.type === TaskType.StartStart ? 1 : -1;
+      lineD += `h${this.type === TaskType.StartStart ? -8 : 8}V${realEndY}H${realEndX}`;
+      arrowHeadD = `v-3l${5 * dir} 3l${-5 * dir} 3z`;
+    } else {
+      realEndX = endX + (
+          (
+              endX >= startX
+              || (endX < startX
+                  && (
+                      this.type === TaskType.StartStart
+                      || this.type === TaskType.FinishStart
+                  )
+              )
+          ) ? 3 : -3);
+      realEndY = endRow * 20  + (endRow < startRow ? 23 : -3);
+      dir = endRow > startRow ? 1 : -1;
+      lineD += `H${realEndX} V${realEndY}`;
+      arrowHeadD = `h3l-3 ${5 * dir}l-3 ${-5 * dir}z`;
+    }
+    arrowHeadD = `M${realEndX} ${realEndY}` + arrowHeadD;
+    line.sa_('d', lineD);
+    arrowHead.sa_('d', arrowHeadD);
+    return arrowG;
+  }
+
+}
+
+export class TempDependency {
+
+  private readonly _arrow: WrappedSVGElement;
+
+  private _arrowHead: string = `v-3l5 3l-5 3v-3z`;
+
+  constructor (private startX: number, private startY: number) {
+    this._arrow = ut.ce_('path')
         .sa_('stroke', '#000')
         .sa_('stroke-width', '1')
-        .sa_('fill-opacity', '0');
-    if (this.hardness === 'Rubber') {
-      this._arrowLine.sa_('stroke-dasharray', '5, 5');
-    }
-    this._arrowHead = ut.ca_('path')
-        .sa_('stroke', '#000')
-        .sa_('stroke-width', '1');
-    this._arrow = ut.ca_('g')
-        .ac_(this._arrowLine)
-        .ac_(this._arrowHead);
-    this._buildArrow();
+        .sa_('d', `M${startX} ${startY} ${this._arrowHead}`);
+  }
+
+  get arrow() {
     return this._arrow;
   }
 
-  protected buildArrowHead(startX: number): void {
-    this._arrowHead.sa_('d',
-    `M${startX} ${this._startPositionY + this._deltaY} h3 l-3 ${-5 * this._directionY} l-3 ${5 * this._directionY} h3`);
-
+  public redraw(endX: number, endY: number) {
+    const length = Math.pow(Math.pow( (this.startX - endX), 2) + Math.pow((this.startY - endY), 2), 0.5) - 6,
+        angle = Math.atan( (this.startY - endY) / (this.startX - endX)) * 180 / Math.PI + (this.startX >= endX ? 180 : 0);
+    if (!isNaN(angle)) {
+      this._arrow.sa_('d', `M${this.startX} ${this.startY}h${length}${this._arrowHead}`)
+          .sa_('transform', `rotate(${angle} ${this.startX} ${this.startY})`);
+    }
   }
-}
 
-class StartStartDependency extends BaseDependencyWrapper {
-  protected _buildArrow() {
-    const verticalDist = 20 * (this._toRow - this._fromRow),
-          horizontalDist = Gantt.currentZoom.weekendSpace * this._numWeekendsToSkip + (this.difference * Gantt.currentZoom.notchDistance);
-    this._arrowLine.sa_('d',
-        `M${this._startPositionX} ${this._startPositionY} h-5 v${verticalDist} h${horizontalDist}`);
-    this._arrowHead.sa_('d',
-        `M${this._startPositionX + horizontalDist - 5} ${this._startPositionY + verticalDist} v-3 l5 3 l-5 3 v-3`);
+  public destruct() {
+    this._arrow.rm_();
   }
-}
 
-class StartFinishDependency extends BaseDependencyWrapper {
-  protected _buildArrow() {
-    const startPosX =  this._startPositionX
-        + (Gantt.currentZoom.notchDistance * this. _taskDuration),
-          dx = Gantt.currentZoom.weekendSpace * this._numWeekendsToSkip + (this.difference * Gantt.currentZoom.notchDistance) + 3;
-    this._arrowLine.sa_('d', `M${startPosX} ${this._startPositionY}, h${dx} v${this._deltaY}`);
-    this.buildArrowHead(startPosX + dx);
-  }
-}
-
-class FinishFinishDependency extends BaseDependencyWrapper {
-  protected _buildArrow() {
-    const startPosX =  this._startPositionX + (Gantt.currentZoom.notchDistance * this. _taskDuration),
-        dx = Gantt.currentZoom.weekendSpace * this._numWeekendsToSkip + (this.difference * Gantt.currentZoom.notchDistance) - 3;
-    this._arrowLine.sa_('d', `M${startPosX} ${this._startPositionY}, h${dx} v${this._deltaY}`);
-    this.buildArrowHead(startPosX + dx);
-  }
-}
-
-class FinishStartDependency extends BaseDependencyWrapper {
-  protected _buildArrow() {
-    const dx = Gantt.currentZoom.weekendSpace * this._numWeekendsToSkip + (this.difference * Gantt.currentZoom.notchDistance) - 3;
-    this._arrowLine.sa_('d', `M${this._startPositionX} ${this._startPositionY}, h${dx} v${this._deltaY}`);
-    this.buildArrowHead(this._startPositionX + dx);
-  }
 }
