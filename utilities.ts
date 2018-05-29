@@ -1,7 +1,7 @@
 export class Utilities {
   public static SVG_NS: 'http://www.w3.org/2000/svg' = 'http://www.w3.org/2000/svg';
 
-  public static ca_(name: string): WrappedSVGElement {
+  public static ce_(name: string): WrappedSVGElement {
 
     return new WrappedSVGElement(document.createElementNS(Utilities.SVG_NS, name));
   }
@@ -41,6 +41,16 @@ export class WrappedSVGElement {
     }
     return this.proxy;
   }
+
+  public pc_(child: SVGElement | WrappedSVGElement): WrappedSVGElement {
+    if (child instanceof SVGElement) {
+      this.element.insertBefore(child, this.element.childNodes[0]);
+    } else {
+      this.element.insertBefore(child.element, this.element.childNodes[0]);
+    }
+    return this.proxy;
+  }
+
   public sa_(attr: string, value: string): WrappedSVGElement {
     this.element.setAttribute(attr, value);
     return this.proxy;
@@ -53,8 +63,7 @@ export class WrappedSVGElement {
   /**
    * @param name - event name
    * @param handler - event handler
-   * @returns {any} - proxy for this element
-   * @private
+   * @return Proxy - proxy for this element
    */
   public ael_(name, handler) {
     this.element.addEventListener(name, handler);
