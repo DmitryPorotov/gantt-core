@@ -6,11 +6,10 @@ export interface ITask {
   meeting: boolean;
   expand: boolean;
   start: Date;
-  end?: Date;
   duration: number;
   tasks?: ITask[];
-  totalDescendants?: number;
   depend?: IDependency[];
+  totalDescendants?: number;
 }
 
 export interface IDependency {
@@ -22,9 +21,9 @@ export interface IDependency {
 
 export enum TaskType {
   StartStart = 1,
-  StartFinish,
+  FinishStart,
   FinishFinish,
-  FinishStart
+  StartFinish,
 }
 
 export interface IGraphNotch {
@@ -39,3 +38,5 @@ export interface INotchesData {
   graphStartIndex: number;
   graphStartDate: Date;
 }
+
+export type TimeLineTasks = number [];
