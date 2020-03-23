@@ -71,7 +71,7 @@ export class Gantt {
     }
   ];
 
-  public static zoomLevel: number = 4;
+  public static zoomLevel: number = 2;
 
   public static timeLineHeight = 60;
 
@@ -371,23 +371,19 @@ export class Gantt {
   }
 
   private updateTaskPositions() {
+    const getTaskBoundaryIfExtremum = (b: Date): IGraphNotch => {
+      if (b < this.notchesData.notches[0].date) {
+        return  this.notchesData.notches[0];
+      } else if (b > this.notchesData.notches[this.notchesData.notches.length - 1].date) {
+        return  this.notchesData.notches[this.notchesData.notches.length - 1];
+      }
+    };
     for (const t of this.wrappedTasks) {
 
-      let start: IGraphNotch, end: IGraphNotch;
+      let start: IGraphNotch = getTaskBoundaryIfExtremum(t.start)
+          , end: IGraphNotch = getTaskBoundaryIfExtremum(t.end);
 
-      if (t.start < this.notchesData.notches[0].date) {
-        start = this.notchesData.notches[0];
-      } else if (t.start > this.notchesData.notches[this.notchesData.notches.length - 1].date) {
-        start = this.notchesData.notches[this.notchesData.notches.length - 1];
-      }
-
-      if (t.end < this.notchesData.notches[0].date) {
-        end = this.notchesData.notches[0];
-      } else if (t.end > this.notchesData.notches[this.notchesData.notches.length - 1].date) {
-        end = this.notchesData.notches[this.notchesData.notches.length - 1];
-      }
-
-      if (!(start && end)) {
+      if (!start || !end) {
         for (
             let i = (this.notchesData.graphStartIndex !== -1 ? this.notchesData.graphStartIndex : 0);
             i < this.notchesData.notches.length;
@@ -402,10 +398,9 @@ export class Gantt {
             end = this.notchesData.notches[i];
           }
         }
-      } else {
+      } else if (start === end) {
         t.isVisible = false;
       }
-
 
       t.startPositionX = start.position;
       t.endPositionX = end.position + Gantt.currentZoom.notchDistance;
