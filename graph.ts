@@ -66,7 +66,7 @@ export class Graph {
 
       if (t.isVisible) {
         t.onMouseDown((task, evt) => {
-          this.tempDependency = new TempDependency(evt.offsetX + startPos, evt.offsetY);
+          this.tempDependency = new TempDependency(evt.offsetX + startPos, evt.offsetY + this.currentStartY);
           this.fromTask = task;
           this.svg.ac_(this.tempDependency.arrow);
           this.tempDependency.arrow.ael_('mouseup', () => {
